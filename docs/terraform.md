@@ -24,10 +24,11 @@ privado criptografado e versionado, OIDC GitHub e uma role com acesso ao state. 
 houver provider GitHub na conta, passe oidc_provider_arn. A trust policy restringe
 o repositório exato e o Environment terraform-dev.
 
-deployment_policy_arns recebe policies de provisionamento aprovadas na conta.
-Não reutilize a policy runtime do Airflow: faltariam criação/destruição/IAM. Deixe CD
-desabilitado até anexar as permissões de deploy restritas aos recursos do projeto.
-A role sem essas policies continua útil para o backend Azure, armazenado no S3.
+O bootstrap inclui uma policy inline de deploy restrita ao bucket, Glue, Athena,
+role Glue e policy runtime deste projeto. `deployment_policy_arns` é opcional para
+permissões adicionais aprovadas na conta; não reutilize a policy runtime do Airflow.
+Deixe CD desabilitado até testar plan autenticado nas duas raízes e revisar as
+permissões de apply. A role com apenas a policy de state já serve ao backend S3.
 
 ```powershell
 Copy-Item terraform/bootstrap/aws/terraform.tfvars.example terraform/bootstrap/aws/terraform.tfvars

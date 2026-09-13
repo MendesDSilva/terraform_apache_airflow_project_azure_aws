@@ -88,5 +88,26 @@ resource "aws_iam_role_policy_attachment" "deployment" {
   role       = aws_iam_role.github.name
   policy_arn = each.value
 }
+
+data "aws_caller_identity" "current" {}
+locals {
+  project_name   = "airflow-multicloud-dev-${var.suffix}"
+  project_bucket = "arn:aws:s3:::${local.project_name}"
+  glue_role      = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.project_name}-glue"
+  runtime_policy = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:policy/${local.project_name}-runtime"
+}
+resource "aws_iam_role_policy" "project_deployment" {
+  role = aws_iam_role.github.id
+  policy = jsonencode({ Version = "2012-10-17", Statement = [
+    { Sid = "ProjectS3", Effect = "Allow", Action = "s3:*", Resource = [local.project_bucket, "${local.project_bucket}/*"] },
+    { Sid = "ProjectGlueJobs", Effect = "Allow", Action = ["glue:CreateJob", "glue:GetJob", "glue:UpdateJob", "glue:DeleteJob", "glue:TagResource", "glue:UntagResource", "glue:GetTags"], Resource = "arn:aws:glue:${var.region}:${data.aws_caller_identity.current.account_id}:job/${local.project_name}-silver" },
+    { Sid = "ProjectGlueCrawler", Effect = "Allow", Action = ["glue:CreateCrawler", "glue:GetCrawler", "glue:UpdateCrawler", "glue:DeleteCrawler", "glue:TagResource", "glue:UntagResource", "glue:GetTags"], Resource = "arn:aws:glue:${var.region}:${data.aws_caller_identity.current.account_id}:crawler/${local.project_name}-silver" },
+    { Sid = "ProjectGlueDatabase", Effect = "Allow", Action = ["glue:CreateDatabase", "glue:GetDatabase", "glue:UpdateDatabase", "glue:DeleteDatabase", "glue:TagResource", "glue:UntagResource", "glue:GetTags"], Resource = ["arn:aws:glue:${var.region}:${data.aws_caller_identity.current.account_id}:catalog", "arn:aws:glue:${var.region}:${data.aws_caller_identity.current.account_id}:database/airflow_multicloud_${var.suffix}"] },
+    { Sid = "ProjectAthena", Effect = "Allow", Action = ["athena:CreateWorkGroup", "athena:GetWorkGroup", "athena:UpdateWorkGroup", "athena:DeleteWorkGroup", "athena:TagResource", "athena:UntagResource", "athena:ListTagsForResource"], Resource = "arn:aws:athena:${var.region}:${data.aws_caller_identity.current.account_id}:workgroup/${local.project_name}" },
+    { Sid = "ProjectGlueRole", Effect = "Allow", Action = ["iam:CreateRole", "iam:GetRole", "iam:UpdateRole", "iam:UpdateAssumeRolePolicy", "iam:DeleteRole", "iam:TagRole", "iam:UntagRole", "iam:ListRoleTags", "iam:ListRolePolicies", "iam:GetRolePolicy", "iam:PutRolePolicy", "iam:DeleteRolePolicy", "iam:ListAttachedRolePolicies", "iam:ListInstanceProfilesForRole"], Resource = local.glue_role },
+    { Sid = "ProjectRuntimePolicy", Effect = "Allow", Action = ["iam:CreatePolicy", "iam:GetPolicy", "iam:DeletePolicy", "iam:CreatePolicyVersion", "iam:GetPolicyVersion", "iam:DeletePolicyVersion", "iam:ListPolicyVersions", "iam:SetDefaultPolicyVersion", "iam:TagPolicy", "iam:UntagPolicy", "iam:ListPolicyTags", "iam:ListEntitiesForPolicy"], Resource = local.runtime_policy },
+    { Sid = "PassProjectRoleToGlue", Effect = "Allow", Action = "iam:PassRole", Resource = local.glue_role, Condition = { StringEquals = { "iam:PassedToService" = "glue.amazonaws.com" } } }
+  ] })
+}
 output "state_bucket" { value = aws_s3_bucket.state.id }
 output "github_role_arn" { value = aws_iam_role.github.arn }

@@ -267,6 +267,6 @@ O bootstrap AWS IAM permanece pendente: a role SSO PowerUserAccess recebeu
 `AccessDenied` em `iam:ListOpenIDConnectProviders`, `iam:GetOpenIDConnectProvider`
 e `iam:CreateOpenIDConnectProvider`. A policy complementar restrita ao provider
 OIDC GitHub e à role do projeto está em `.runtime/aws-bootstrap-iam-policy.json`
-e requer atribuição ao permission set. O plano restante contém três recursos
+e requer atribuição ao permission set. O plano restante contém quatro recursos
 IAM; `AWS_DEPLOY_ROLE_ARN` e `ENABLE_INFRA_CD` ainda não foram definidos no
 GitHub. As outras oito variables de `terraform-dev` já foram configuradas.
