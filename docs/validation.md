@@ -270,3 +270,20 @@ OIDC GitHub e à role do projeto está em `.runtime/aws-bootstrap-iam-policy.jso
 e requer atribuição ao permission set. O plano restante contém quatro recursos
 IAM; `AWS_DEPLOY_ROLE_ARN` e `ENABLE_INFRA_CD` ainda não foram definidos no
 GitHub. As outras oito variables de `terraform-dev` já foram configuradas.
+
+## IAM Identity Center: policy salva, reprovisão pendente
+
+Em 12 de setembro de 2026, a sessão AWS `airflow-dev` conseguiu ler o permission set
+`PowerUserAccess` na instância `ssoins-7223d3cd2cbdc286`. A policy inline anterior
+tinha três statements; os três statements OIDC/role de
+`.runtime/aws-bootstrap-iam-policy.json` foram mesclados sem removê-los. A leitura
+posterior confirmou os seis statements esperados.
+
+A chamada `ProvisionPermissionSet` para a conta `399258986559` retornou status
+`FAILED`: o principal SSO atual não pode executar `iam:GetRole` na própria role
+`AWSReservedSSO_PowerUserAccess_3865473641557f16`. O perfil alternativo
+`terraform-bcb` também não possui `iam:GetRole` nem `sso:ListInstances`.
+Assim, a policy está salva no Identity Center, mas ainda não foi propagada à
+role AWS. A reprovisão exige uma identidade administradora. A cópia da policy
+anterior está em `.runtime/aws-sso-inline-before.json`; a versão mesclada está
+em `.runtime/aws-sso-inline-merged.json`. `ENABLE_INFRA_CD` continua ausente.
