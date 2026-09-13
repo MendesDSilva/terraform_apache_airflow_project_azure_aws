@@ -1,0 +1,49 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check . && pytest tests/unit -q && python scripts/check_secrets.py
+      - name: Gitleaks
+        run: |
+          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.24.3 git /repo --redact --no-banner
+  airflow:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python scripts/local_setup.py
+      - run: docker compose build airflow-apiserver
+      - run: docker compose run --rm --no-deps test
+  spark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python scripts/local_setup.py
+      - run: docker compose build spark-test
+      - run: docker compose run --rm --no-deps spark-test
+  terraform:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        root: [aws, azure, databricks, bootstrap/aws, bootstrap/azure]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.15.8
+      - run: terraform fmt -check -recursive terraform
+      - run: terraform -chdir=terraform/${{ matrix.root }} init -backend=false -input=false -lockfile=readonly
+      - run: terraform -chdir=terraform/${{ matrix.root }} validate

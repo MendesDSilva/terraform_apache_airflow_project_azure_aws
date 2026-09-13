@@ -1,0 +1,6 @@
+# Airflow e providers Celery/Postgres vêm da imagem, preservados por constraints.
+boto3==1.43.56
+azure-identity==1.25.3
+azure-storage-file-datalake==12.25.0
+databricks-sdk==0.136.0
+requests==2.34.2

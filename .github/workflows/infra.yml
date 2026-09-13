@@ -1,0 +1,85 @@
+name: Infrastructure
+on:
+  workflow_dispatch:
+    inputs:
+      root:
+        type: choice
+        options: [aws, azure]
+        required: true
+      apply:
+        type: boolean
+        default: false
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: terraform-dev
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: >-
+      vars.ENABLE_INFRA_CD == 'true' &&
+      ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_repository.full_name == github.repository &&
+        github.event.workflow_run.head_branch == 'main'))
+    runs-on: ubuntu-latest
+    environment: terraform-dev
+    strategy:
+      max-parallel: 1
+      matrix:
+        root: [aws, azure]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.15.8
+      - name: Select root
+        id: select
+        env:
+          REQUESTED: ${{ inputs.root }}
+          ROOT: ${{ matrix.root }}
+        run: |
+          if [ -z "$REQUESTED" ] || [ "$REQUESTED" = "$ROOT" ]; then
+            echo 'enabled=true' >> "$GITHUB_OUTPUT"
+          fi
+      - uses: aws-actions/configure-aws-credentials@v4
+        if: steps.select.outputs.enabled == 'true'
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - uses: azure/login@v2
+        if: steps.select.outputs.enabled == 'true' && matrix.root == 'azure'
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Plan and optional apply of the same plan
+        if: steps.select.outputs.enabled == 'true'
+        env:
+          ROOT: ${{ matrix.root }}
+          STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          TF_VAR_region: ${{ vars.AWS_REGION }}
+          TF_VAR_suffix: ${{ vars.PROJECT_SUFFIX }}
+          TF_VAR_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          TF_VAR_location: ${{ vars.AZURE_LOCATION }}
+          TF_VAR_airflow_principal_id: ${{ vars.AZURE_AIRFLOW_PRINCIPAL_ID }}
+          ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: 'true'
+          DO_APPLY: ${{ github.event_name == 'workflow_run' || inputs.apply }}
+        run: |
+          python scripts/remote_backend.py "$ROOT" --bucket "$STATE_BUCKET" --region "$AWS_REGION"
+          terraform -chdir="terraform/$ROOT" init -input=false -lockfile=readonly -backend-config=state.backend.hcl
+          terraform -chdir="terraform/$ROOT" plan -input=false -out=deployment.tfplan
+          if [ "$DO_APPLY" = true ]; then
+            terraform -chdir="terraform/$ROOT" apply -input=false deployment.tfplan
+          fi

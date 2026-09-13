@@ -1,0 +1,10 @@
+.git
+.codex
+.runtime
+.env
+.venv
+**/.terraform
+**/*.tfstate*
+**/*.tfvars
+logs
+__pycache__

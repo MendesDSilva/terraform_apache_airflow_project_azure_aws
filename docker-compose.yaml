@@ -1,0 +1,150 @@
+# Ambiente local baseado no Compose oficial Apache Airflow 3.3.1 (Apache-2.0).
+x-airflow: &airflow
+  build: .
+  image: airflow-multicloud:3.3.1
+  platform: linux/amd64
+  user: "${AIRFLOW_UID:-50000}:0"
+  environment: &environment
+    AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+    AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${POSTGRES_PASSWORD:?Execute scripts/local_setup.py}@postgres/airflow
+    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql+psycopg2://airflow:${POSTGRES_PASSWORD}@postgres/airflow
+    AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/0
+    AIRFLOW__CORE__FERNET_KEY: ${FERNET_KEY:?Execute scripts/local_setup.py}
+    AIRFLOW__API_AUTH__JWT_SECRET: ${JWT_SECRET:?Execute scripts/local_setup.py}
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-apiserver:8080/execution/
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+    AIRFLOW__CELERY__WORKER_CONCURRENCY: "2"
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
+    PYTHONPATH: /opt/airflow
+    PYTHONUSERBASE: /home/airflow/.local
+    PIPELINE_CONFIG: /opt/airflow/.runtime/config.json
+    AWS_PROFILE: ${AWS_PROFILE:-airflow-dev}
+    AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+    AWS_CONFIG_FILE: /auth/aws/config
+    AWS_SHARED_CREDENTIALS_FILE: /auth/aws/credentials
+    AZURE_CONFIG_DIR: /auth/azure
+    DATABRICKS_CONFIG_FILE: /auth/databricks/config
+    DATABRICKS_CONFIG_PROFILE: ${DATABRICKS_CONFIG_PROFILE:-airflow-dev}
+    DATABRICKS_AUTH_STORAGE: plaintext
+    HOME: /auth/home
+  volumes:
+    - ./dags:/opt/airflow/dags:ro
+    - ./utils:/opt/airflow/utils:ro
+    - ./.runtime:/opt/airflow/.runtime:ro
+    - airflow-logs:/opt/airflow/logs
+    - auth-cache:/auth
+  depends_on: &dependencies
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    airflow-init:
+      condition: service_completed_successfully
+  restart: unless-stopped
+
+services:
+  postgres:
+    image: postgres:16.13-bookworm
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: airflow
+    volumes: [postgres-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: [CMD, pg_isready, -U, airflow]
+      interval: 10s
+      retries: 10
+    restart: unless-stopped
+  redis:
+    image: redis:7.2.13-bookworm
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 10s
+      retries: 10
+    restart: unless-stopped
+  airflow-init:
+    <<: *airflow
+    user: "0:0"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      <<: *environment
+      _AIRFLOW_DB_MIGRATE: "true"
+      _AIRFLOW_WWW_USER_CREATE: "true"
+      _AIRFLOW_WWW_USER_USERNAME: admin
+      _AIRFLOW_WWW_USER_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:?Execute scripts/local_setup.py}
+    entrypoint: /bin/bash
+    command:
+      - -ec
+      - |
+        mkdir -p /auth/home/.aws /auth/aws /auth/azure /auth/databricks /opt/airflow/logs
+        ln -sfn /auth/aws/sso /auth/home/.aws/sso
+        chown -R ${AIRFLOW_UID:-50000}:0 /auth /opt/airflow/logs
+        chmod 700 /auth
+        exec /entrypoint airflow version
+    restart: "no"
+  airflow-apiserver:
+    <<: *airflow
+    command: api-server
+    ports: ["127.0.0.1:${AIRFLOW_PORT:-8080}:8080"]
+    healthcheck:
+      test: [CMD, curl, --fail, http://localhost:8080/api/v2/monitor/health]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+  airflow-scheduler:
+    <<: *airflow
+    command: scheduler
+    healthcheck:
+      test: [CMD, curl, --fail, http://localhost:8974/health]
+      interval: 30s
+      retries: 10
+  airflow-dag-processor:
+    <<: *airflow
+    command: dag-processor
+  airflow-worker:
+    <<: *airflow
+    command: celery worker
+    environment:
+      <<: *environment
+      DUMB_INIT_SETSID: "0"
+    depends_on:
+      <<: *dependencies
+      airflow-apiserver:
+        condition: service_healthy
+  airflow-triggerer:
+    <<: *airflow
+    command: triggerer
+  auth:
+    <<: *airflow
+    profiles: [tools]
+    entrypoint: /bin/bash
+    command: ["-l"]
+    environment:
+      <<: *environment
+      BROWSER: /opt/airflow/scripts/oauth_browser.py
+    restart: "no"
+  test:
+    <<: *airflow
+    profiles: [tools]
+    entrypoint: python
+    command: ["-m", pytest, tests/unit, tests/dags, "-q"]
+    depends_on: {}
+    restart: "no"
+  spark-test:
+    image: airflow-multicloud-spark:3.5.5
+    profiles: [tools]
+    build:
+      context: .
+      dockerfile: tests/Dockerfile.spark
+    command: [python, "-m", pytest, tests/spark, "-q"]
+
+volumes:
+  postgres-data:
+  airflow-logs:
+  auth-cache:

@@ -1,0 +1,3 @@
+subscription_id        = "00000000-0000-0000-0000-000000000000"
+project_resource_group = "rg-airflow-multicloud-dev-troque123"
+github_repository      = "SEU-USUARIO/SEU-REPO"
