@@ -4,7 +4,7 @@ CI executa em PR e push main: Ruff, pytest, scanner de arquivos sensíveis, Gitl
 import/topologia Airflow dentro da imagem, Spark/Delta separado, fmt e validate nas
 cinco raízes Terraform. Não usa credenciais cloud e funciona em forks.
 
-O workflow Infrastructure usa workflow_dispatch ou conclusão bem-sucedida do CI na main e começa desabilitado.
+O workflow Infrastructure usa workflow_dispatch ou conclusão bem-sucedida do CI na main. Plan manual na main é permitido com o CD automático desabilitado; apply manual e apply após CI exigem ENABLE_INFRA_CD=true.
 Antes de definir ENABLE_INFRA_CD=true:
 
 1. Conclua primeiro apply local e migração dos states AWS/Azure para S3.

@@ -22,11 +22,12 @@ concurrency:
 jobs:
   deploy:
     if: >-
-      vars.ENABLE_INFRA_CD == 'true' &&
-      ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
-       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' &&
-        github.event.workflow_run.head_repository.full_name == github.repository &&
-        github.event.workflow_run.head_branch == 'main'))
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.apply == false) ||
+      (vars.ENABLE_INFRA_CD == 'true' &&
+       ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' &&
+         github.event.workflow_run.head_repository.full_name == github.repository &&
+         github.event.workflow_run.head_branch == 'main')))
     runs-on: ubuntu-latest
     environment: terraform-dev
     strategy:

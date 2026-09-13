@@ -238,3 +238,35 @@ terminou em `success`: Python, Airflow, Spark e as cinco raízes Terraform
 passaram. O workflow Infrastructure disparado pela conclusão do primeiro CI
 ficou `skipped`, como esperado, porque `ENABLE_INFRA_CD` não está configurada.
 Este resultado valida a execução hospedada de CI; não comprova deploy OIDC.
+
+## Execução conjunta e preparação de CD em 12 de setembro de 2026
+
+`doctor.py --clouds both` passou após renovar o SSO AWS no Docker. A DAG
+`multi_cloud_data_pipeline` terminou em `success` na execução
+`manual__resume_2026_09_12_both`, com `clouds=both` e
+`load_date=2026-09-12` (13/09/2026, 00:47:45–00:51:36 UTC). As 12 tarefas,
+incluindo os dois ramos e `complete`, passaram na primeira tentativa.
+Athena retornou 1.000 linhas na consulta
+`d4ed0340-3607-4b40-b41b-e993cfce30cb`; os jobs Databricks AWS e Azure
+foram `670366776400121` e `408196885161335`.
+
+O environment GitHub `terraform-dev` foi criado com reviewer obrigatório e
+branch permitida `main`. O bootstrap Azure criou a managed identity, credencial
+federada e três atribuições RBAC no RG do projeto; plano posterior `No changes`.
+O bucket AWS `airflow-multicloud-state-mm260909` foi criado com versionamento,
+criptografia AES256, bloqueio público e exigência de TLS. Antes da migração, os
+três states locais foram copiados para `.runtime/state-backup-2026-09-12`.
+Os states AWS, Azure e Databricks foram migrados para chaves `dev/<raiz>/terraform.tfstate`
+no S3. A leitura remota confirmou recursos e outputs idênticos aos backups;
+o backend reiniciou lineage/serial durante a cópia. Cada objeto possui VersionId
+e criptografia AES256. Planos finais das três raízes retornaram `No changes`
+após sincronizar `scripts/common.py` na AWS. O state do bootstrap AWS continua
+local, conforme o desenho do projeto.
+
+O bootstrap AWS IAM permanece pendente: a role SSO PowerUserAccess recebeu
+`AccessDenied` em `iam:ListOpenIDConnectProviders`, `iam:GetOpenIDConnectProvider`
+e `iam:CreateOpenIDConnectProvider`. A policy complementar restrita ao provider
+OIDC GitHub e à role do projeto está em `.runtime/aws-bootstrap-iam-policy.json`
+e requer atribuição ao permission set. O plano restante contém três recursos
+IAM; `AWS_DEPLOY_ROLE_ARN` e `ENABLE_INFRA_CD` ainda não foram definidos no
+GitHub. As outras oito variables de `terraform-dev` já foram configuradas.
