@@ -224,3 +224,17 @@ commits nem remote Git. `gh repo view` confirmou ausência de remotos. O passo
 Gitleaks em modo `git`, builds de imagem do workflow e o deploy OIDC do workflow
 Infrastructure não foram executados nesta retomada. O deploy continua
 condicionado a `ENABLE_INFRA_CD=true` e à preparação documentada em `ci-cd.md`.
+
+## GitHub Actions validado em 12 de setembro de 2026
+
+O projeto foi publicado em `MendesDSilva/terraform_apache_airflow_project_azure_aws`.
+O primeiro CI (`34728112295`) falhou em `terraform (bootstrap/azure)` porque o
+lockfile criado no Windows não continha o checksum do provider para Linux.
+Python, Airflow e Spark já haviam passado. `terraform providers lock` adicionou
+os checksums `linux_amd64` aos cinco lockfiles, no commit `ef1fcfc`.
+
+O [CI do commit ef1fcfc](https://github.com/MendesDSilva/terraform_apache_airflow_project_azure_aws/actions/runs/34728328501)
+terminou em `success`: Python, Airflow, Spark e as cinco raízes Terraform
+passaram. O workflow Infrastructure disparado pela conclusão do primeiro CI
+ficou `skipped`, como esperado, porque `ENABLE_INFRA_CD` não está configurada.
+Este resultado valida a execução hospedada de CI; não comprova deploy OIDC.
